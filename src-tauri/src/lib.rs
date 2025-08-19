@@ -2,6 +2,7 @@ use crate::video_player::*;
 
 mod video_player;
 
+/// Important - this has to be an async command or Windows will deadlock on opening the new window
 #[tauri::command]
 async fn open_video_player(url: String, app_handle: tauri::AppHandle) {
     if url.is_empty() {
