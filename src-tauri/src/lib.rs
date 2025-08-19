@@ -3,8 +3,7 @@ use crate::video_player::*;
 mod video_player;
 
 #[tauri::command]
-fn open_video_player(url: &str, app_handle: tauri::AppHandle) {
-    let mut url = url.to_string();
+async fn open_video_player(url: String, app_handle: tauri::AppHandle) {
     if url.is_empty() {
         return;
     }

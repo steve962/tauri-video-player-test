@@ -1,3 +1,7 @@
+/// This module is a Rust implementation of a video player using GStreamer
+/// and Tauri. It provides functionality to open, play, pause, stop, and resize
+/// video players, as well as handle events from the frontend.
+
 use raw_window_handle::{RawWindowHandle, HasWindowHandle};
 use tauri::{AppHandle, WebviewWindow, WebviewWindowBuilder, WebviewUrl, Emitter };
 use gstreamer::prelude::*;
@@ -34,6 +38,9 @@ impl VideoPlayer {
         }
     }
 
+    /// This does the heavy lifting of setting up the GStreamer pipeline.   We mainly use
+    /// `playbin` to handle the video playback, but we also set the video sink to a `glimagesink`
+    /// which allows us to render the video in a window.
     pub fn build_pipeline_for_url(&mut self, window: &Option<WebviewWindow>, url: &str) {
         println!("Building pipeline for URL: {}", url);
         gstreamer::init().unwrap();
@@ -47,6 +54,8 @@ impl VideoPlayer {
             .expect("Could not create pipeline from launch string");
         pipeline.set_property("video_sink", &sink);
 
+        // I had to figure this one out through guesswork, trial, and error, and while it works,
+        // I'm not convinced it's the correct way to get the video overlay from the sink.
         let video_overlay = match sink.dynamic_cast::<gstreamer_video::VideoOverlay>() {
             Ok(overlay) => overlay,
             Err(_) => {
@@ -55,6 +64,12 @@ impl VideoPlayer {
             }
         };
 
+        // The following code tells Gstreamer the correct window handle to render the video into
+        // based on the platform.   It's the only unsafe code here, and is based off of a
+        // Discord conversation between '@vr7bd' and '@load fc' here, without which I probably
+        // would not have been able to figure this out:
+        //     https://discordapp.com/channels/616186924390023171/1309966247986987118
+        // 
         match window {
             Some(window) => {
 
@@ -91,12 +106,16 @@ impl VideoPlayer {
             },
         }
 
+        // Set the video size for now... it will almost certainly be reized when the window
+        // is ready to start playing.
         let _ = video_overlay.set_render_rectangle(0, 20, 300, 200);
 
+        // Save the pipeline and video overlay for later use
         self.pipeline = Some(pipeline);
         self.video_overlay = Some(video_overlay);
     }
 
+    /// Changes the video size and position within the video player window
     pub fn change_video_size(&self, x: i32, y: i32, width: i32, height: i32) {
         println!("change_video_size called with x: {}, y: {}, width: {}, height: {}", x, y, width, height);
         if let Some(overlay) = &self.video_overlay {
@@ -105,6 +124,9 @@ impl VideoPlayer {
         }
     }
 
+    /// Depending on platform and whether you're using the standard window frame,
+    /// and also whether you want to fill the entire window, you might
+    /// need to tweak this to allow space for window frames, title bars, etc.
     pub fn fill_current_window(&self) {
         self.change_video_size(0, 0, self.width as i32, self.height as i32);
 //        self.change_video_size(2, 2, self.width as i32 - 4, self.height as i32 - 4);
@@ -254,7 +276,7 @@ impl VideoPlayerCollection {
         }
     }
 
-    pub fn lock_players(&self) -> std::sync::MutexGuard<HashMap<String, VideoPlayer>> {
+    pub fn lock_players(&self) -> std::sync::MutexGuard<'_, HashMap<String, VideoPlayer>> {
         self.players.lock().unwrap()
     }
 
