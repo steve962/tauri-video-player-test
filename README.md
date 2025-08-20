@@ -1,10 +1,10 @@
 # Tauri Video Player Test
 
-This is a test program showing how to play a video stream in Tauri using the GStreamer rust bindings.
+This is a test program showing how to play a video stream in Tauri using the GStreamer rust bindings.  It can handle pretty much anything that GStreamer playbin setup can handle, including most streaming formats (if the proper codecs are supported) and video files.   It's by no means a production ready streamer... but it can get you over the tough learning curve and major pitfalls I ran into when trying to do this for my program.
 
 I'm putting the source up for two reasons:
 
-1) As a reference for getting assistance with some known issues
+1) As a reference for getting assistance with some issues (which are now fixed)
 
 2) As a stepping point for other people trying to figure out how to work with Rust, GStreamer, and Tauri and trying to put them all together since there doesn't seem to be a good starting point for this yet.
 
@@ -62,11 +62,10 @@ The first time I tried this on a Mac, it built, ran, and took a long time before
 
 ### Windows
 
-By using a bit of a hack, I was able to get video to work on Windows as well.   The problem here is that when we set the GStreamer VideoOverlay to
-the tauri WebviewWindow handle, the actual video appears *behind* the webview instead of in the front of it like Linux and Mac.   When I first ran this, I thought video wasn't working at all... until I resized rapidly and caught flickers of video behind the webview.
+I was able to get video to work on Windows as well.   The problem here is the glImageSink which we are using on Linux and Mac is not as well supported on Windows, and will actually render the video *behind* the Tauri Webview instead of in front of it.   It also cannot be resized or repositioned -- it takes up the full window, which makes it difficult to add controls to the screen.
 
-There is a code workaround for this, which involves making the Webview invisible when the video is playing, and then visible again when it stops.   The major downside of this is that you cannot put controls on the Webview and display the video in
-
-While the program runs, I was unable to get visible video to work.   That doesn't mean it's not working, however...  what I discovered here was that the window webview contents were sitting ABOVE the video.   Resizing rapidly gets yuo flickers of video.   This is the issue I'm trying to resolve by posting this code, so hopefully I'll have a fix in before many people look at it.
+After some help on Discord (thank you, @FabianLars, for the hint which led me down the rabbit hole to solving this), and a lot of googling and
+perusing of the GStreamer bug reports, I discovered the easy fix for all of this was to switch the Sink on Windows to use d3d12videosink instead
+of glImageSink.   (d3d11videosink works as well, but NOT d3dvideosink, which has weird positioning issues...).   With that, everything works just like on Mac and Linux.
 
 

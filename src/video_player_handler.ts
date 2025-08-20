@@ -22,6 +22,16 @@ export default class VideoPlayerHandler
     attach() {
         let _self = this;
 
+        document.querySelector("#video-play")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            _self.send_event("play", {});
+        });
+
+        document.querySelector("#video-pause")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            _self.send_event("pause", {});
+        });
+
         // Poll periodically for errors on the video player
         if (!_self.interval) {
             _self.interval = setInterval(() => {

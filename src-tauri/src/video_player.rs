@@ -3,7 +3,7 @@
 /// video players, as well as handle events from the frontend.
 
 use raw_window_handle::{RawWindowHandle, HasWindowHandle};
-use tauri::{AppHandle, WebviewWindow, WebviewWindowBuilder, WebviewUrl, Emitter };
+use tauri::{AppHandle, WebviewWindow, WebviewWindowBuilder, WebviewUrl, Emitter, Manager };
 use gstreamer::prelude::*;
 use gstreamer_video::prelude::*;
 use std::collections::HashMap;
@@ -21,7 +21,8 @@ pub struct VideoPlayer {
     pub height: f64,
     pub url: String,
     pub pipeline: Option<gstreamer::Element>,
-    pub video_overlay: Option<gstreamer_video::VideoOverlay>,   
+    pub video_overlay: Option<gstreamer_video::VideoOverlay>,
+    pub fillcount: i32,
 }
 
 impl VideoPlayer {
@@ -35,6 +36,7 @@ impl VideoPlayer {
             url: url,
             pipeline: None,
             video_overlay: None,
+            fillcount: 0,
         }
     }
 
@@ -45,7 +47,12 @@ impl VideoPlayer {
         println!("Building pipeline for URL: {}", url);
         gstreamer::init().unwrap();
 
-        let sink = gstreamer::ElementFactory::make("glimagesink")
+        #[cfg(not(windows))]
+        let factoryname = "glimagesink";
+        #[cfg(windows)]
+        let factoryname = "d3d12videosink";
+
+        let sink = gstreamer::ElementFactory::make(factoryname)
             .name("sink")
             .build()
             .expect("Could not create sink element");
@@ -126,10 +133,11 @@ impl VideoPlayer {
 
     /// Depending on platform and whether you're using the standard window frame,
     /// and also whether you want to fill the entire window, you might
-    /// need to tweak this to allow space for window frames, title bars, etc.
+    /// need to tweak this to allow space for window frames, title bars, controls, etc.
+    /// As a quick and dirty demo, I'm including a simple pause control at the bottom of the screen
     pub fn fill_current_window(&self) {
-        self.change_video_size(0, 0, self.width as i32, self.height as i32);
-//        self.change_video_size(2, 2, self.width as i32 - 4, self.height as i32 - 4);
+//        self.change_video_size(0, 0, self.width as i32, self.height as i32);
+        self.change_video_size(10, 10, self.width as i32 - 20, self.height as i32 - 70);
     }
 
     pub fn play(&self) {
@@ -143,14 +151,14 @@ impl VideoPlayer {
             // so the video can be seen, since otherwise the webview is shown over
             // the video, hiding it.   The downside of this fix is that you can't have
             // any visible controls in the webview itself, making it a bit less useful
-            #[cfg(windows)]
-            if let Some(window) = &self.window {
-                let _ = window.with_webview(|webview| {
-                    unsafe {
-                        let _ = webview.controller().SetIsVisible(false);
-                    }
-                });
-            }
+//            #[cfg(windows)]
+//            if let Some(window) = &self.window {
+//                let _ = window.with_webview(|webview| {
+//                    unsafe {
+//                        let _ = webview.controller().SetIsVisible(false);
+//                    }
+//                });
+//            }
         }
     }
 
@@ -172,14 +180,14 @@ impl VideoPlayer {
 
             // The other side of that windows hack in play() - when we stop
             // displaying the video, show the webview again.
-            #[cfg(windows)]
-            if let Some(window) = &self.window {
-                let _ = window.with_webview(|webview| {
-                    unsafe {
-                        let _ = webview.controller().SetIsVisible(true);
-                    }
-                });
-            }
+//            #[cfg(windows)]
+//            if let Some(window) = &self.window {
+//                let _ = window.with_webview(|webview| {
+//                    unsafe {
+//                        let _ = webview.controller().SetIsVisible(true);
+//                    }
+//                });
+//            }
         }
         self.pipeline = None;
         self.video_overlay = None;
@@ -190,6 +198,11 @@ impl VideoPlayer {
     /// but you might want to do this in a service thread
     pub fn poll(&mut self) -> bool {
         if let Some(pipeline) = &self.pipeline {
+            if self.fillcount > 0 {
+                self.fill_current_window();
+                self.fillcount -= 1;
+            }
+
             // Check for error or EOS
             let bus = pipeline.bus().unwrap();
             while let Some(msg) = bus.pop() {
@@ -224,9 +237,8 @@ impl VideoPlayer {
         if self.window.is_none() {
             let window = WebviewWindowBuilder::new(&self.app_handle, &self.name, WebviewUrl::App("video_player.html".to_string().into()))
                 .inner_size(self.width, self.height)
-//                .decorations(false)
                 .title(&self.url)
-//                .parent(&self.app_handle.get_webview_window(&self.parent).unwrap())?
+                .parent(&self.app_handle.get_webview_window("main").unwrap())?
                 .build()?;
             self.window = Some(window);
         }
@@ -256,7 +268,7 @@ impl VideoPlayer {
             "ready" => {
                 if let Some(window) = &self.window {
                     self.build_pipeline_for_url(&Some(window.clone()), &self.url.clone());
-                    self.fill_current_window();
+                    self.fillcount = 3;
                     self.play();
                 }
             },
