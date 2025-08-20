@@ -138,6 +138,19 @@ impl VideoPlayer {
             pipeline
                 .set_state(gstreamer::State::Playing)
                 .expect("Unable to set the pipeline to the `Playing` state");
+
+            // Hack to hide the platform webview on Windows when we start Playing
+            // so the video can be seen, since otherwise the webview is shown over
+            // the video, hiding it.   The downside of this fix is that you can't have
+            // any visible controls in the webview itself, making it a bit less useful
+            #[cfg(windows)]
+            if let Some(window) = &self.window {
+                let _ = window.with_webview(|webview| {
+                    unsafe {
+                        let _ = webview.controller().SetIsVisible(false);
+                    }
+                });
+            }
         }
     }
 
@@ -156,6 +169,17 @@ impl VideoPlayer {
             pipeline
                 .set_state(gstreamer::State::Null)
                 .expect("Unable to set the pipeline to the `Null` state");
+
+            // The other side of that windows hack in play() - when we stop
+            // displaying the video, show the webview again.
+            #[cfg(windows)]
+            if let Some(window) = &self.window {
+                let _ = window.with_webview(|webview| {
+                    unsafe {
+                        let _ = webview.controller().SetIsVisible(true);
+                    }
+                });
+            }
         }
         self.pipeline = None;
         self.video_overlay = None;
